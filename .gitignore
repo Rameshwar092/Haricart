@@ -112,3 +112,8 @@ temp/
 .project-config.json
 
 backend/.env
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
