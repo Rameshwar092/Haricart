@@ -1,0 +1,1 @@
+ALTER TABLE `residentProfiles` ADD `phoneVerifiedAt` timestamp;

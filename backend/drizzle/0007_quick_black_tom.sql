@@ -1,0 +1,1 @@
+ALTER TABLE `catalogProducts` ADD `countryOfOrigin` varchar(80) DEFAULT 'India' NOT NULL;

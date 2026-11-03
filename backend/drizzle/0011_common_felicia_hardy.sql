@@ -1,0 +1,1 @@
+ALTER TABLE `orders` MODIFY COLUMN `paymentMethod` enum('online_checkout','upi_qr','cash_on_delivery','pay_after_delivery') NOT NULL DEFAULT 'online_checkout';

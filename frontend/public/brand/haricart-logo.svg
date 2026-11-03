@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="HariCart">
+  <rect width="512" height="512" rx="112" fill="#214d35"/>
+  <circle cx="256" cy="256" r="196" fill="#2b6143"/>
+  <g fill="#fbf8ee">
+    <rect x="150" y="150" width="56" height="220" rx="14"/>
+    <rect x="306" y="196" width="56" height="174" rx="14"/>
+    <rect x="150" y="238" width="212" height="50" rx="14"/>
+  </g>
+  <path d="M334 186c-4-52 30-92 90-98 6 58-26 100-90 98z" fill="#9ccc4a"/>
+  <path d="M338 182c18-26 40-46 66-62" stroke="#214d35" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <circle cx="198" cy="412" r="16" fill="#9ccc4a"/>
+  <circle cx="314" cy="412" r="16" fill="#9ccc4a"/>
+</svg>

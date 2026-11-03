@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `paymentMethod` enum('online_checkout','cash_on_delivery','pay_after_delivery') DEFAULT 'online_checkout' NOT NULL;
