@@ -548,6 +548,13 @@ export const communityRouter = router({
       await db.update(notifications).set({ isRead: true }).where(and(eq(notifications.id, input.notificationId), eq(notifications.userId, ctx.user.id)));
       return { success: true };
     }),
+    /** Bell → "Mark all read": clears the unread count for this person only. */
+    markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.update(notifications).set({ isRead: true }).where(and(eq(notifications.userId, ctx.user.id), eq(notifications.isRead, false)));
+      return { success: true };
+    }),
   }),
   orders: router({
     /**

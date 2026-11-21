@@ -3,6 +3,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { CatalogOriginLabel } from "@/components/CatalogOriginLabel";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { NotificationBell } from "@/components/NotificationBell";
 import { STAFF_ORDERS_REFRESH_MS } from "@/lib/order-alarm";
 import { NEXT_ACTION_LABEL, ORDER_STATUS_LABEL, canMarkItemsOutOfStock, canRoleAdvanceOrder, canStaffCancel, isOrderClosed, nextOrderStatus, type OrderStatus } from "@shared/order-flow";
 import { OWNER_DISPLAY_NAME } from "@/lib/brand";
@@ -83,7 +84,7 @@ export default function OperationsPortal() {
 
   const products = (kind === "admin" ? adminProducts.data || [] : shopInventory.data || []) as InventoryProduct[];
   return <div className="min-h-screen bg-[#f7f4eb]">
-    <header className="border-b bg-card"><div className="container flex h-20 items-center justify-between"><Link href="/"><BrandMark /></Link><div className="flex items-center gap-2"><Button variant="ghost" size="sm"><Bell className="mr-2 h-4 w-4" />Updates {unread ? `(${unread})` : ""}</Button><Link href="/"><Button variant="outline" size="sm" className="rounded-full">Storefront</Button></Link></div></div></header>
+    <header className="border-b bg-card"><div className="container flex h-20 items-center justify-between"><Link href="/"><BrandMark /></Link><div className="flex items-center gap-2"><NotificationBell /><Link href="/"><Button variant="outline" size="sm" className="rounded-full">Storefront</Button></Link></div></div></header>
     <main className="container py-10">
       <section className="mb-8 flex flex-col gap-4 border-b pb-7 md:flex-row md:items-end md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.17em] text-primary">{portalCopy[kind].label}</p><h1 className="mt-2 font-editorial text-4xl font-semibold tracking-tight">{portalCopy[kind].title}</h1><p className="mt-3 max-w-xl leading-7 text-muted-foreground">{portalCopy[kind].intro}</p></div><div className="rounded-2xl bg-primary px-4 py-3 text-sm text-primary-foreground"><b>{kind === "admin" ? OWNER_DISPLAY_NAME : user?.name || "Signed in"}</b><span className="mx-2 opacity-60">·</span>{user?.role}</div></section>
       {(kind === "shop_owner" || kind === "admin") && <ServiceHistoryPanel rows={(serviceRequests.data || []) as ServiceHistoryRow[]} updating={updateServiceRequest.isPending} onUpdate={(requestId, status) => updateServiceRequest.mutate({ requestId, status })} />}
