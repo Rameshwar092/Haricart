@@ -156,13 +156,33 @@ async function issueResidentPhoneSession(req: Parameters<typeof getSessionCookie
   return user;
 }
 
-/** After any successful OTP check: start the customer's session (if needed) and save the verified number. */
-async function recordVerifiedPhone(ctx: { user: { id: number } | null; req: Parameters<typeof getSessionCookieOptions>[0]; res: { cookie: (name: string, value: string, options: Record<string, unknown>) => void } }, phone: string, verificationNote: string) {
+/**
+ * Whose account is this? Logging in with a number always opens THAT number's account.
+ * If the browser is still logged in as someone else (for example the owner), it switches
+ * to the account of the number that was just verified, instead of keeping the old one.
+ */
+export function shouldSwitchAccount(currentOpenId: string | null | undefined, phone: string): boolean {
+  if (!currentOpenId) return true;
+  // Older accounts that were not made by phone login keep their account; the number is added to it.
+  if (!currentOpenId.startsWith("phone_")) return false;
+  return currentOpenId !== getResidentPhoneOpenId(phone);
+}
+
+/** After any successful OTP check: log in to this number's account and save the verified number. */
+async function recordVerifiedPhone(ctx: { user: { id: number; openId?: string | null } | null; req: Parameters<typeof getSessionCookieOptions>[0]; res: { cookie: (name: string, value: string, options: Record<string, unknown>) => void } }, phone: string, verificationNote: string) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
   const phoneVerifiedAt = new Date();
-  const userId = ctx.user?.id ?? (await assertResidentInviteAllowed(db, phone), (await issueResidentPhoneSession(ctx.req, ctx.res, phone)).id);
-  if (ctx.user && isOwnerPhone(phone) && ctx.user.id === userId) await db.update(users).set({ role: "admin" }).where(eq(users.id, userId));
+  let userId: number;
+  if (ctx.user && !shouldSwitchAccount(ctx.user.openId, phone)) {
+    // Already logged in as this number.
+    userId = ctx.user.id;
+    if (isOwnerPhone(phone)) await db.update(users).set({ role: "admin" }).where(eq(users.id, userId));
+  } else {
+    // Not logged in, or logged in as a different number: start a session for this number.
+    await assertResidentInviteAllowed(db, phone);
+    userId = (await issueResidentPhoneSession(ctx.req, ctx.res, phone)).id;
+  }
   const [profile] = await db.select().from(residentProfiles).where(eq(residentProfiles.userId, userId)).limit(1);
   if (profile) {
     await db.update(residentProfiles).set({ phone, phoneVerifiedAt, verificationNote }).where(eq(residentProfiles.userId, userId));
