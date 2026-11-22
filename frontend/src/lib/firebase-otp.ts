@@ -109,7 +109,16 @@ export function friendlyFirebaseError(error: unknown) {
       return "Phone login is not enabled yet. Please contact HariCart.";
     case "auth/network-request-failed":
       return "Network error. Please check your internet connection.";
+    case "auth/billing-not-enabled":
+      // Firebase sends real SMS only on the Blaze (pay-as-you-go) plan. Test numbers still work without it.
+      return "SMS can't be sent yet: the shop's Firebase project needs the Blaze plan for real SMS. Please contact HariCart.";
+    case "auth/admin-restricted-operation":
+    case "auth/sms-region-not-allowed":
+      return "SMS to this number's region is blocked. The shop must allow India in Firebase → Authentication → Settings → SMS region policy.";
+    case "auth/internal-error":
+      return "Firebase could not send the SMS right now. Please try again in a minute.";
     default:
-      return error instanceof Error && error.message && !code ? error.message : "Could not complete OTP verification. Please try again.";
+      // Show Firebase's own code too, so the shop owner can see the exact reason.
+      return error instanceof Error && error.message && !code ? error.message : `Could not send or check the OTP${code ? ` (${code})` : ""}. Please try again.`;
   }
 }
