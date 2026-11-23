@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEGAL_INFO, PRIVACY_POLICY, TERMS_AND_CONDITIONS, legalContactLines } from "@shared/legal";
+import { LEGAL_INFO, PRIVACY_POLICY, TERMS_AND_CONDITIONS, legalContactLines } from "../../shared/legal";
 
 describe("privacy policy and terms", () => {
   it("both documents have sections with unique links", () => {

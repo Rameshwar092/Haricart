@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccountSignIn, canReassignDelivery, canSeeCustomerPhone, isAllowedDeliveryTransition, maskPhone, nextDeliveryStatus } from "@shared/delivery-flow";
+import { canAccountSignIn, canReassignDelivery, canSeeCustomerPhone, isAllowedDeliveryTransition, maskPhone, nextDeliveryStatus } from "../../shared/delivery-flow";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { checkLoginAllowed } from "./routers/community";
