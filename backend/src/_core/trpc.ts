@@ -51,3 +51,18 @@ export const adminProcedure = t.procedure.use(
     });
   }),
 );
+
+/**
+ * Delivery boy only. The account must be a delivery boy AND active (inactive accounts are
+ * already turned away in sdk.authenticateRequest; this checks again so the rule cannot be skipped).
+ */
+export const deliveryProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    if (ctx.user.role !== "delivery_boy" || ctx.user.accountStatus !== "active") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Only active HariCart delivery partners can use this." });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  }),
+);

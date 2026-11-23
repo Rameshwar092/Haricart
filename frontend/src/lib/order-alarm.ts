@@ -52,7 +52,7 @@ export function alarmTitle(baseTitle: string, waiting: number, role: AlarmRole):
 
 /** Short words for the alarm banner. */
 export function alarmHeadline(waiting: number, role: AlarmRole): string {
-  if (role === "delivery_boy") return waiting === 1 ? "1 order ready to deliver" : `${waiting} orders ready to deliver`;
+  if (role === "delivery_boy") return waiting === 1 ? "1 new order assigned — please accept" : `${waiting} new orders assigned — please accept`;
   return waiting === 1 ? "1 new order waiting" : `${waiting} new orders waiting`;
 }
 

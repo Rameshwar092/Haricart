@@ -28,7 +28,7 @@ describe("new-order alarm", () => {
     expect(alarmTitle("HariCart", 2, "admin")).toBe("(2) new orders · HariCart");
     expect(alarmTitle("(2) new orders · HariCart", 1, "admin")).toBe("(1) new order · HariCart");
     expect(alarmTitle("HariCart", 0, "admin")).toBe("HariCart");
-    expect(alarmHeadline(1, "delivery_boy")).toBe("1 order ready to deliver");
+    expect(alarmHeadline(1, "delivery_boy")).toBe("1 new order assigned — please accept");
   });
 
   it("opens the right workspace for each role", () => {

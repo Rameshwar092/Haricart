@@ -9,6 +9,8 @@ export const userRoles = ["user", "customer", "admin", "shop_owner", "delivery_b
 export const residentVerificationStatuses = ["pending", "verified", "rejected"] as const;
 export { ORDER_STATUSES as orderStatuses, ORDER_ITEM_STATUSES as orderItemStatuses } from "../../shared/order-flow";
 import { ORDER_ITEM_STATUSES, ORDER_STATUSES } from "../../shared/order-flow";
+import { ACCOUNT_STATUSES, DELIVERY_STATUSES } from "../../shared/delivery-flow";
+export { ACCOUNT_STATUSES as accountStatuses, DELIVERY_STATUSES as deliveryStatuses } from "../../shared/delivery-flow";
 export const paymentStatuses = ["pending", "paid", "failed", "refunded"] as const;
 export const paymentMethods = ["online_checkout", "upi_qr", "cash_on_delivery", "pay_after_delivery"] as const;
 
@@ -19,6 +21,8 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", userRoles).default("customer").notNull(),
+  /** Only "active" accounts can log in. Delivery boys start as "pending" until the owner activates them. */
+  accountStatus: mysqlEnum("accountStatus", ACCOUNT_STATUSES).default("active").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -127,6 +131,11 @@ export const orders = mysqlTable("orders", {
   cancelledAt: timestamp("cancelledAt"),
   cancelReason: varchar("cancelReason", { length: 255 }),
   cancelledByRole: varchar("cancelledByRole", { length: 32 }),
+  /** Delivery boy's step for this order. Empty until the owner assigns a delivery boy. */
+  deliveryStatus: mysqlEnum("deliveryStatus", DELIVERY_STATUSES),
+  assignedAt: timestamp("assignedAt"),
+  acceptedAt: timestamp("acceptedAt"),
+  pickedUpAt: timestamp("pickedUpAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -254,3 +263,47 @@ export const communityInvites = mysqlTable("communityInvites", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
+
+/** Delivery team: one row per delivery boy. Only the owner/admin can create these. */
+export const deliveryPartners = mysqlTable("deliveryPartners", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  fullName: varchar("fullName", { length: 120 }).notNull(),
+  phone: varchar("phone", { length: 32 }).notNull().unique(),
+  notes: varchar("notes", { length: 500 }),
+  createdByUserId: int("createdByUserId").notNull(),
+  activatedByUserId: int("activatedByUserId"),
+  activatedAt: timestamp("activatedAt"),
+  statusReason: varchar("statusReason", { length: 255 }),
+  statusChangedAt: timestamp("statusChangedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/** Every time the owner gives an order to a delivery boy, moves it to another one, or takes it back. */
+export const deliveryAssignments = mysqlTable("deliveryAssignments", {
+  id: int("id").autoincrement().primaryKey(),
+  orderId: int("orderId").notNull(),
+  deliveryUserId: int("deliveryUserId"),
+  previousDeliveryUserId: int("previousDeliveryUserId"),
+  assignedByUserId: int("assignedByUserId").notNull(),
+  action: mysqlEnum("action", ["assigned", "reassigned", "unassigned"]).notNull(),
+  reason: varchar("reason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/** Security record: logins, account status changes, assignments and delivery steps. Rows are never edited. */
+export const auditLogs = mysqlTable("auditLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  actorUserId: int("actorUserId"),
+  actorRole: varchar("actorRole", { length: 32 }),
+  action: varchar("action", { length: 64 }).notNull(),
+  targetUserId: int("targetUserId"),
+  orderId: int("orderId"),
+  details: text("details"),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DeliveryPartner = typeof deliveryPartners.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;

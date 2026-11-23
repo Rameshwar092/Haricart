@@ -12,6 +12,7 @@ import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
+import { canAccountSignIn } from "@shared/delivery-flow";
 import { ENV } from "./env";
 
 /** Written into every session so tokens from other apps are never accepted. */
@@ -81,6 +82,9 @@ class SessionService {
 
     const user = await db.getUserByOpenId(session.openId);
     if (!user) throw ForbiddenError("User not found");
+    // Checked on EVERY request: a suspended or deactivated account loses access at once,
+    // even if its browser still has a valid session cookie.
+    if (!canAccountSignIn(user.accountStatus)) throw ForbiddenError("Account is not active");
 
     // Record activity at most every 15 minutes instead of on every request.
     const now = new Date();

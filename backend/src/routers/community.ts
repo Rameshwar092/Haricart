@@ -17,6 +17,8 @@ import { legacyPhoneVariants, normalizePhone } from "@shared/phone";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL, canCustomerCancel, canMarkItemsOutOfStock, canRoleAdvanceOrder, canStaffCancel, isAllowedOrderTransition, isOrderClosed, recalculateOrderTotals, type OrderStatus } from "@shared/order-flow";
 import { hashResidentPassword } from "../password";
 import { isFirebaseConfigured, verifyFirebasePhoneToken } from "../_core/firebaseAuth";
+import { blockedAccountMessage, canAccountSignIn } from "@shared/delivery-flow";
+import { writeAuditLog } from "../audit";
 
 
 const SIMULATION_OTP = "1234";
@@ -168,11 +170,39 @@ export function shouldSwitchAccount(currentOpenId: string | null | undefined, ph
   return currentOpenId !== getResidentPhoneOpenId(phone);
 }
 
+/** "resident" = the customer app login. "delivery" = the delivery dashboard login (delivery boys only). */
+export const loginPurposeSchema = z.enum(["resident", "delivery"]).default("resident");
+export type LoginPurpose = z.infer<typeof loginPurposeSchema>;
+
+/**
+ * Server-side login rules, checked BEFORE a session is created:
+ *  - suspended / deactivated / not-yet-activated accounts can never log in;
+ *  - the delivery dashboard login only works for numbers the owner added as delivery boys
+ *    (it never creates a new account).
+ * Returns the existing account for this number, if there is one.
+ */
+export function checkLoginAllowed(existing: { role: string; accountStatus?: string | null } | null | undefined, purpose: LoginPurpose): { allowed: true } | { allowed: false; message: string } {
+  if (purpose === "delivery" && existing?.role !== "delivery_boy") {
+    return { allowed: false, message: "This number is not registered as a HariCart delivery partner. Please ask the owner to add you." };
+  }
+  if (existing && !canAccountSignIn(existing.accountStatus)) return { allowed: false, message: blockedAccountMessage(existing.accountStatus) };
+  return { allowed: true };
+}
+
 /** After any successful OTP check: log in to this number's account and save the verified number. */
-async function recordVerifiedPhone(ctx: { user: { id: number; openId?: string | null } | null; req: Parameters<typeof getSessionCookieOptions>[0]; res: { cookie: (name: string, value: string, options: Record<string, unknown>) => void } }, phone: string, verificationNote: string) {
+async function recordVerifiedPhone(ctx: { user: { id: number; openId?: string | null } | null; req: Parameters<typeof getSessionCookieOptions>[0]; res: { cookie: (name: string, value: string, options: Record<string, unknown>) => void } }, phone: string, verificationNote: string, purpose: LoginPurpose = "resident") {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
   const phoneVerifiedAt = new Date();
+  await adoptLegacyPhoneAccount(db, phone);
+  const existing = await getUserByOpenId(getResidentPhoneOpenId(phone));
+  const check = checkLoginAllowed(existing, purpose);
+  if (!check.allowed) {
+    if (existing?.role === "delivery_boy" || purpose === "delivery") {
+      await writeAuditLog({ actor: existing ? { id: existing.id, role: existing.role } : null, action: "delivery_login_blocked", targetUserId: existing?.id, details: { phone, reason: existing ? existing.accountStatus : "not_a_delivery_partner", purpose }, req: ctx.req as never });
+    }
+    throw new TRPCError({ code: "FORBIDDEN", message: check.message });
+  }
   let userId: number;
   if (ctx.user && !shouldSwitchAccount(ctx.user.openId, phone)) {
     // Already logged in as this number.
@@ -180,9 +210,13 @@ async function recordVerifiedPhone(ctx: { user: { id: number; openId?: string | 
     if (isOwnerPhone(phone)) await db.update(users).set({ role: "admin" }).where(eq(users.id, userId));
   } else {
     // Not logged in, or logged in as a different number: start a session for this number.
-    await assertResidentInviteAllowed(db, phone);
+    // Delivery boys were added by the owner, so they do not need a resident invitation.
+    if (existing?.role !== "delivery_boy") await assertResidentInviteAllowed(db, phone);
     userId = (await issueResidentPhoneSession(ctx.req, ctx.res, phone)).id;
   }
+  const signedIn = await getUserByOpenId(getResidentPhoneOpenId(phone));
+  if (signedIn?.role === "delivery_boy") await writeAuditLog({ actor: { id: signedIn.id, role: signedIn.role }, action: "delivery_login", targetUserId: signedIn.id, details: { purpose }, req: ctx.req as never });
+  else if (signedIn?.role === "admin") await writeAuditLog({ actor: { id: signedIn.id, role: signedIn.role }, action: "admin_login", targetUserId: signedIn.id, req: ctx.req as never });
   const [profile] = await db.select().from(residentProfiles).where(eq(residentProfiles.userId, userId)).limit(1);
   if (profile) {
     await db.update(residentProfiles).set({ phone, phoneVerifiedAt, verificationNote }).where(eq(residentProfiles.userId, userId));
@@ -208,7 +242,7 @@ async function assertCanManageOrder(db: NonNullable<Awaited<ReturnType<typeof ge
 }
 
 /** In-app message to the customer, the shop owner, the delivery person and every admin (each person once). */
-async function notifyOrderParties(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, order: typeof orders.$inferSelect, title: string, body: string) {
+export async function notifyOrderParties(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, order: typeof orders.$inferSelect, title: string, body: string) {
   const [shop] = await db.select({ ownerUserId: shops.ownerUserId }).from(shops).where(eq(shops.id, order.shopId)).limit(1);
   const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
   const seen = new Set<number>();
@@ -257,7 +291,7 @@ export const communityRouter = router({
       if (isOtpSimulationAllowed()) return { success: true, simulated: true };
       throw new TRPCError({ code: "BAD_GATEWAY", message: "We could not send the OTP right now. Please check the number and try again in a minute." });
     }),
-    confirmOtp: publicProcedure.input(z.object({ phone: phoneSchema, code: z.string().trim().min(4).max(10) })).mutation(async ({ ctx, input }) => {
+    confirmOtp: publicProcedure.input(z.object({ phone: phoneSchema, code: z.string().trim().min(4).max(10), purpose: loginPurposeSchema })).mutation(async ({ ctx, input }) => {
       const twilio = getTwilioConfig();
       const simulation = isOtpSimulationAllowed();
       const acceptSimulationCode = () => {
@@ -285,10 +319,10 @@ export const communityRouter = router({
         acceptSimulationCode();
       }
 
-      return recordVerifiedPhone(ctx, input.phone, twilio ? "Phone verified through SMS OTP." : "Phone verified (simulation).");
+      return recordVerifiedPhone(ctx, input.phone, twilio ? "Phone verified through SMS OTP." : "Phone verified (simulation).", input.purpose);
     }),
     /** Firebase phone OTP: the browser verifies the code with Firebase and sends us the ID token. */
-    firebaseVerify: publicProcedure.input(z.object({ phone: phoneSchema, idToken: z.string().min(100).max(5000) })).mutation(async ({ ctx, input }) => {
+    firebaseVerify: publicProcedure.input(z.object({ phone: phoneSchema, idToken: z.string().min(100).max(5000), purpose: loginPurposeSchema })).mutation(async ({ ctx, input }) => {
       if (!isFirebaseConfigured()) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "OTP service is not available right now. Please try again later." });
       let claims;
       try {
@@ -300,7 +334,7 @@ export const communityRouter = router({
       if (claims.phoneNumber !== toE164(input.phone)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "The verified number does not match the number you entered." });
       }
-      return recordVerifiedPhone(ctx, input.phone, "Phone verified through Firebase SMS OTP.");
+      return recordVerifiedPhone(ctx, input.phone, "Phone verified through Firebase SMS OTP.", input.purpose);
     }),
     updateAddress: protectedProcedure
       .input(z.object({
@@ -595,7 +629,8 @@ export const communityRouter = router({
         if (!ownedShops.length) return empty;
         rows = await db.select(columns).from(orders).where(and(eq(orders.status, "placed"), inArray(orders.shopId, ownedShops.map(shop => shop.id)))).orderBy(desc(orders.placedAt)).limit(50);
       } else if (ctx.user.role === "delivery_boy") {
-        rows = await db.select(columns).from(orders).where(and(eq(orders.status, "packed"), eq(orders.deliveryUserId, ctx.user.id))).orderBy(desc(orders.placedAt)).limit(50);
+        // New orders the owner gave to this delivery boy that he has not accepted yet.
+        rows = await db.select(columns).from(orders).where(and(eq(orders.deliveryStatus, "assigned"), eq(orders.deliveryUserId, ctx.user.id), sql`${orders.status} <> 'cancelled'`)).orderBy(desc(orders.placedAt)).limit(50);
       } else {
         return empty;
       }
@@ -690,7 +725,9 @@ export const communityRouter = router({
       const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
       if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
       if (ctx.user.role === "customer" || ctx.user.role === "user") throw new TRPCError({ code: "FORBIDDEN", message: "Customers cannot update fulfilment status" });
-      if (ctx.user.role === "delivery_boy" && order.deliveryUserId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "This order is not assigned to you" });
+      // Delivery boys move their orders only through the delivery dashboard (delivery.updateStatus),
+      // which follows Assigned → Accepted → Picked Up → Out for Delivery → Delivered.
+      if (ctx.user.role === "delivery_boy") throw new TRPCError({ code: "FORBIDDEN", message: "Delivery partners update orders from the delivery dashboard." });
       if (ctx.user.role === "shop_owner") {
         const [shop] = await db.select({ ownerUserId: shops.ownerUserId }).from(shops).where(eq(shops.id, order.shopId)).limit(1);
         if (shop?.ownerUserId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "This order belongs to another shop" });
@@ -698,10 +735,13 @@ export const communityRouter = router({
       if (order.status === "cancelled") throw new TRPCError({ code: "BAD_REQUEST", message: "This order was cancelled." });
       if (!isAllowedOrderTransition(order.status, input.status)) throw new TRPCError({ code: "BAD_REQUEST", message: "The order must follow Placed → Confirmed → Packed → Out for delivery → Delivered." });
       if (input.status === "delivered" && order.paymentMethod === "cash_on_delivery" && order.paymentStatus !== "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "Cash on Delivery must be collected before completing delivery." });
-      if ((ctx.user.role === "shop_owner" || ctx.user.role === "delivery_boy" || ctx.user.role === "admin") && !canRoleAdvanceOrder(ctx.user.role, input.status)) throw new TRPCError({ code: "FORBIDDEN", message: "This role cannot apply that order status" });
+      if ((ctx.user.role === "shop_owner" || ctx.user.role === "admin") && !canRoleAdvanceOrder(ctx.user.role, input.status)) throw new TRPCError({ code: "FORBIDDEN", message: "This role cannot apply that order status" });
 
       const now = new Date();
-      await db.update(orders).set({ status: input.status, ...(input.status === "confirmed" ? { confirmedAt: now } : {}), ...(input.status === "packed" ? { packedAt: now } : {}), ...(input.status === "out_for_delivery" ? { outForDeliveryAt: now } : {}), ...(input.status === "delivered" ? { deliveredAt: now } : {}) }).where(eq(orders.id, order.id));
+      // When the owner moves an order that has a delivery boy, his delivery step follows.
+      const syncedDeliveryStatus = order.deliveryUserId && (input.status === "out_for_delivery" || input.status === "delivered") ? input.status : null;
+      await db.update(orders).set({ status: input.status, ...(input.status === "confirmed" ? { confirmedAt: now } : {}), ...(input.status === "packed" ? { packedAt: now } : {}), ...(input.status === "out_for_delivery" ? { outForDeliveryAt: now } : {}), ...(input.status === "delivered" ? { deliveredAt: now } : {}), ...(syncedDeliveryStatus ? { deliveryStatus: syncedDeliveryStatus } : {}) }).where(eq(orders.id, order.id));
+      if (syncedDeliveryStatus) await writeAuditLog({ actor: { id: ctx.user.id, role: ctx.user.role }, action: "delivery_status_changed", orderId: order.id, targetUserId: order.deliveryUserId, details: { from: order.deliveryStatus, to: syncedDeliveryStatus, by: "owner" }, req: ctx.req as never });
       const copy = getStatusCopy(input.status, order.orderNumber);
       const [shop] = await db.select({ ownerUserId: shops.ownerUserId }).from(shops).where(eq(shops.id, order.shopId)).limit(1);
       const adminUsers = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));

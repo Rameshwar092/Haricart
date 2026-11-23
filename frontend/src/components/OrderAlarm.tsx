@@ -86,9 +86,10 @@ export function OrderAlarm() {
     if (!fresh.length) return;
     void utils.community.orders.mine.invalidate();
     void utils.admin.operations.orders.invalidate();
+    if (role === "delivery_boy") void utils.delivery.orders.invalidate();
     const newest = waitingOrders.find(order => fresh.includes(order.id)) ?? waitingOrders[0];
     const amount = newest ? `₹${Number(newest.total).toFixed(0)}` : "";
-    const title = role === "delivery_boy" ? "Order ready to deliver" : "New order!";
+    const title = role === "delivery_boy" ? "New order assigned to you" : "New order!";
     const body = newest ? `Flat ${newest.apartmentUnit} · ${amount} · #${newest.orderNumber.slice(-6).toUpperCase()}` : "Open HariCart to see it.";
     toast.success(`${title} ${body}`, { duration: 8000 });
     showSystemNotification(`HariCart: ${title}`, body, workspacePathForRole(role));

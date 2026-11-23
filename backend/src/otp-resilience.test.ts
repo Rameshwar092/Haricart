@@ -8,6 +8,9 @@ vi.mock("./db", () => ({
   getDb: getDbMock,
   getResidentProfileByUserId: vi.fn(),
   getVerifiedResidentProfile: vi.fn(),
+  // The login now checks the account's status before anything else.
+  getUserByOpenId: vi.fn(async () => ({ id: 99, role: "customer", accountStatus: "active" })),
+  upsertUser: vi.fn(),
 }));
 
 function makeCtx(): TrpcContext {
@@ -20,6 +23,7 @@ function makeCtx(): TrpcContext {
       email: "otp@example.com",
       loginMethod: "phone",
       role: "customer",
+      accountStatus: "active",
       createdAt: now,
       updatedAt: now,
       lastSignedIn: now,

@@ -10,6 +10,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { OrderAlarm } from "./components/OrderAlarm";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import DeliveryDashboard from "./pages/DeliveryDashboard";
 import OperationsPortal from "./pages/OperationsPortal";
 import Orders from "./pages/Orders";
 import CustomerDirectory from "./pages/CustomerDirectory";
@@ -24,7 +25,7 @@ function Router() {
       <Route path={"/orders"} component={Orders} />
       <Route path={"/customers"} component={CustomerDirectory} />
       <Route path={"/shop"} component={OperationsPortal} />
-      <Route path={"/delivery"} component={OperationsPortal} />
+      <Route path={"/delivery"} component={DeliveryDashboard} />
       <Route path={"/admin"} component={OperationsPortal} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

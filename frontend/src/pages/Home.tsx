@@ -44,7 +44,7 @@ import { buildProductCardPlusAction, canQueueProductCardPlus } from "@shared/pro
 import { ArrowRight, BadgeCheck, Bell, Building2, Check, ChevronDown, CircleCheck, Clock3, Dumbbell, Edit3, Flower2, GraduationCap, Home as HomeIcon, Leaf, LayoutGrid, LockKeyhole, MapPin, Minus, PackageCheck, Phone, Plus, Search, Share2, ShoppingBag, Sparkles, Truck, UserCircle, Users, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Link, useLocation } from "wouter";
+import { Link, Redirect, useLocation } from "wouter";
 
 // Optional photo overrides by product handle (files in frontend/public).
 const fallbackImages: Record<string, string> = {};
@@ -442,6 +442,8 @@ export default function Home() {
     otpSimulated,
     onCompleteRegistration: () => verification.mutate({ phone, blockNumber, flatNumber }),
   };
+  // Delivery boys have their own dashboard; they never see the customer app or the flat form.
+  if (isAuthenticated && user?.role === "delivery_boy") return <Redirect to="/delivery" />;
   if (shouldShowResidentLaunchGate({ authLoading, isAuthenticated, isVerifiedResident, isPrivileged: canOpenOwnerPortal })) {
     return <ResidentLaunchGate authLoading={authLoading} authenticated={isAuthenticated} verificationProps={verificationProps} />;
   }
