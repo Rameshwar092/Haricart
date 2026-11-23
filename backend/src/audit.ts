@@ -13,7 +13,8 @@ export type AuditAction =
   | "order_assigned"
   | "order_reassigned"
   | "order_unassigned"
-  | "delivery_status_changed";
+  | "delivery_status_changed"
+  | "account_deletion_requested";
 
 type RequestLike = { ip?: string; headers?: Record<string, string | string[] | undefined> } | undefined;
 

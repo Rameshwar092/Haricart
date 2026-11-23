@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { usePhoneOtp } from "@/lib/use-phone-otp";
+import { LegalLinks } from "@/pages/LegalPage";
 import { OTP_RESEND_COOLDOWN_SECONDS } from "@/lib/otp-resend";
 import { DELIVERY_STATUS_LABEL, DELIVERY_STATUSES, NEXT_DELIVERY_ACTION_LABEL, nextDeliveryStatus, type DeliveryStatus } from "@shared/delivery-flow";
 import { Bike, CheckCircle2, Clock, IndianRupee, LogOut, MapPin, Package, Phone, RefreshCcw, ShieldAlert } from "lucide-react";
@@ -63,6 +64,7 @@ function DeliveryLogin() {
         <Button type="submit" className="w-full rounded-full" disabled={request.isPending || confirm.isPending}>{!sent ? (request.isPending ? "Sending…" : "Send OTP") : confirm.isPending ? "Checking…" : "Verify and log in"}</Button>
         {sent && <Button type="button" variant="ghost" className="w-full rounded-full text-xs" disabled={cooldown > 0 || request.isPending} onClick={() => request.mutate(phone)}>{cooldown > 0 ? `Resend OTP in ${cooldown}s` : "Resend OTP"}</Button>}
       </form>
+      <p className="mt-5 text-center text-xs text-muted-foreground"><LegalLinks /></p>
     </div>
   </Shell>;
 }

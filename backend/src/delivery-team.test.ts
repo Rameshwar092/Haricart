@@ -122,3 +122,10 @@ describe("role checks on the API", () => {
     await expect(appRouter.createCaller(ctxFor("delivery_boy")).community.orders.advance({ orderId: 1, status: "delivered" })).rejects.toBeTruthy();
   });
 });
+
+describe("account deletion request", () => {
+  it("needs a logged-in account", async () => {
+    const ctx = { ...ctxFor("customer"), user: null };
+    await expect(appRouter.createCaller(ctx).community.resident.requestAccountDeletion({})).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});

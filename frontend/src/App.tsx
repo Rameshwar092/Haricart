@@ -11,6 +11,7 @@ import { OrderAlarm } from "./components/OrderAlarm";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import DeliveryDashboard from "./pages/DeliveryDashboard";
+import LegalPage from "./pages/LegalPage";
 import OperationsPortal from "./pages/OperationsPortal";
 import Orders from "./pages/Orders";
 import CustomerDirectory from "./pages/CustomerDirectory";
@@ -27,6 +28,12 @@ function Router() {
       <Route path={"/shop"} component={OperationsPortal} />
       <Route path={"/delivery"} component={DeliveryDashboard} />
       <Route path={"/admin"} component={OperationsPortal} />
+      {/* Public pages: readable without logging in (needed for the Play Store listing). */}
+      <Route path={"/privacy"} component={LegalPage} />
+      <Route path={"/privacy-policy"} component={LegalPage} />
+      <Route path={"/delete-account"} component={LegalPage} />
+      <Route path={"/terms"} component={LegalPage} />
+      <Route path={"/terms-and-conditions"} component={LegalPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

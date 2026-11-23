@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { createHash } from "node:crypto";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { appSettings, carts, catalogProducts, communityInvites, exchangeRequests, notifications, orderItems, orders, payments, residentProfiles, shops, users, vehicleServiceRequests } from "../../drizzle/schema";
+import { appSettings, auditLogs, carts, catalogProducts, communityInvites, exchangeRequests, notifications, orderItems, orders, payments, residentProfiles, shops, users, vehicleServiceRequests } from "../../drizzle/schema";
 import { hashOwnerId, verifyOwnerSecretId } from "@shared/owner-auth";
 import { getDb, getResidentProfileByUserId, getUserByOpenId, getVerifiedResidentProfile, upsertUser } from "../db";
 import { getCustomerCart, isMarketOpen } from "./commerce";
@@ -450,6 +450,28 @@ export const communityRouter = router({
         } });
         return { success: true, message: "Details saved successfully.", blockNumber, flatNumber, apartmentUnit };
       }),
+    /**
+     * "Delete my account" request (Privacy Policy / Play Store requirement).
+     * Logs it in the security record and tells every owner/admin, who then deletes the data.
+     * Asking again within 24 hours does not create a second request.
+     */
+    requestAccountDeletion: protectedProcedure.input(z.object({ reason: z.string().trim().max(500).optional() }).optional()).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [recent] = await db.select({ id: auditLogs.id }).from(auditLogs).where(and(eq(auditLogs.actorUserId, ctx.user.id), eq(auditLogs.action, "account_deletion_requested"), gte(auditLogs.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)))).limit(1);
+      if (recent) return { success: true, alreadyRequested: true };
+      const profile = await getResidentProfileByUserId(ctx.user.id);
+      const who = `${profile?.fullName || ctx.user.name || "A user"}${profile?.phone ? ` (${profile.phone})` : ""}${profile?.apartmentUnit && profile.apartmentUnit !== "PENDING" ? `, Flat ${profile.apartmentUnit}` : ""}`;
+      const reason = input?.reason?.trim() || null;
+      await writeAuditLog({ actor: { id: ctx.user.id, role: ctx.user.role }, action: "account_deletion_requested", targetUserId: ctx.user.id, details: { phone: profile?.phone || null, reason }, req: ctx.req as never });
+      const admins = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
+      const rows = [
+        ...admins.map(admin => ({ userId: admin.id, audienceRole: "admin" as const, title: "Account deletion request", body: `${who} asked to delete their account and personal data (user #${ctx.user.id}).${reason ? ` Reason: ${reason.replace(/[.!?]*$/, "")}.` : ""} Please complete it within 30 days.`, type: "privacy_request", actionUrl: "/admin" })),
+        { userId: ctx.user.id, audienceRole: ctx.user.role, title: "Deletion request received", body: "We received your request to delete your account. We will complete it within 30 days and may call you to confirm.", type: "privacy_request", actionUrl: "/privacy" },
+      ];
+      await db.insert(notifications).values(rows);
+      return { success: true, alreadyRequested: false };
+    }),
     verifiedGate: protectedProcedure.query(async ({ ctx }) => Boolean(await getVerifiedResidentProfile(ctx.user.id))),
     submitVehicleServiceRequest: protectedProcedure
       .input(z.object({

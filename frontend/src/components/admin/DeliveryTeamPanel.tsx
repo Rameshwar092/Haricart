@@ -26,6 +26,7 @@ const auditLabel: Record<string, string> = {
   order_reassigned: "Order reassigned",
   order_unassigned: "Order taken back",
   delivery_status_changed: "Delivery step",
+  account_deletion_requested: "Account deletion request",
 };
 
 function time(value: Date | string | null | undefined) {
