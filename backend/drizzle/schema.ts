@@ -78,6 +78,8 @@ export const catalogProducts = mysqlTable("catalogProducts", {
   name: varchar("name", { length: 160 }).notNull(),
   description: text("description"),
   imageUrl: text("imageUrl"),
+  /** All photos as a JSON list, cover first (up to 5). imageUrl always holds the cover. */
+  imageUrls: text("imageUrls"),
   countryOfOrigin: varchar("countryOfOrigin", { length: 80 }).default("India").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   compareAtPrice: decimal("compareAtPrice", { precision: 10, scale: 2 }),

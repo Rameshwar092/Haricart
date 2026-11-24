@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildCatalogProductPayload } from "@shared/catalog";
+import { buildCatalogProductPayload } from "../../shared/catalog";
 
 describe("Local Catalog Add item form", () => {
   const source = fs.readFileSync(
@@ -12,14 +12,19 @@ describe("Local Catalog Add item form", () => {
     path.resolve(process.cwd(), "src/routers/community.ts"),
     "utf8",
   );
+  const photoPickerSource = fs.readFileSync(
+    path.resolve(process.cwd(), "../frontend/src/components/ProductPhotoPicker.tsx"),
+    "utf8",
+  );
   const schemaSource = fs.readFileSync(
     path.resolve(process.cwd(), "drizzle/schema.ts"),
     "utf8",
   );
 
   it("keeps the photo-first fields and storefront visibility guidance", () => {
-    expect(source).toContain("Add photos and videos");
-    expect(source).toContain('accept="image/jpeg,image/png,image/webp"');
+    expect(source).toContain("<ProductPhotoPicker");
+    expect(photoPickerSource).toContain("Add photos (up to");
+    expect(photoPickerSource).toContain('accept="image/jpeg,image/png,image/webp" multiple');
     expect(source).toContain("Item name (required)");
     expect(source).toContain("MRP (required) · ₹");
     expect(source).toContain("Discount % (optional)");

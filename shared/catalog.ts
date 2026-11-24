@@ -1,3 +1,5 @@
+import { normalizeProductImages } from "./product-images";
+
 export const formatCatalogOrigin = (value: string | null | undefined) => value?.trim() || "India";
 
 export type CatalogProductDraft = {
@@ -8,6 +10,8 @@ export type CatalogProductDraft = {
   stockQuantity: string | number;
   unitLabel?: string;
   imageUrl?: string;
+  /** All photos, cover first (up to 5). When given, imageUrl is set to the first one. */
+  imageUrls?: string[];
   description?: string;
   shopId?: string | number;
   isAvailable: boolean;
@@ -21,12 +25,14 @@ export type CatalogProductPayload = {
   stockQuantity: number;
   unitLabel: string;
   imageUrl?: string;
+  imageUrls?: string[];
   description?: string;
   shopId?: number;
   isAvailable: boolean;
 };
 
 export function buildCatalogProductPayload(draft: CatalogProductDraft): CatalogProductPayload {
+  const imageUrls = draft.imageUrls ? normalizeProductImages(draft.imageUrls) : undefined;
   return {
     name: draft.name.trim(),
     price: draft.price,
@@ -34,7 +40,8 @@ export function buildCatalogProductPayload(draft: CatalogProductDraft): CatalogP
     countryOfOrigin: formatCatalogOrigin(draft.countryOfOrigin),
     stockQuantity: Math.max(0, Number(draft.stockQuantity) || 0),
     unitLabel: draft.unitLabel?.trim() || "kg",
-    imageUrl: draft.imageUrl?.trim() || undefined,
+    imageUrl: imageUrls ? imageUrls[0] : draft.imageUrl?.trim() || undefined,
+    ...(imageUrls ? { imageUrls } : {}),
     description: draft.description?.trim() || undefined,
     shopId: draft.shopId === undefined || draft.shopId === "" ? undefined : Number(draft.shopId),
     isAvailable: draft.isAvailable,
@@ -51,6 +58,7 @@ export type CatalogProductUpdatePayload = {
   stockQuantity: number;
   unitLabel: string;
   imageUrl: string | null;
+  imageUrls?: string[];
   isAvailable: boolean;
 };
 
@@ -66,6 +74,7 @@ export function buildCatalogProductUpdatePayload(id: number, draft: CatalogProdu
     stockQuantity: payload.stockQuantity,
     unitLabel: payload.unitLabel,
     imageUrl: payload.imageUrl ?? null,
+    ...(payload.imageUrls ? { imageUrls: payload.imageUrls } : {}),
     isAvailable: payload.isAvailable,
   };
 }

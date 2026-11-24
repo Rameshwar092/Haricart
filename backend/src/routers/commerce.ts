@@ -8,6 +8,7 @@
  */
 
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { parseProductImages } from "@shared/product-images";
 import { z } from "zod";
 import {
   addCartLines,
@@ -64,7 +65,7 @@ export function normalizeLocalCatalogProduct(product: typeof catalogProducts.$in
     productType: "Local catalog",
     vendor: "HariCart",
     tags: [product.categoryId ? String(product.categoryId) : (/fruit|apple|banana|mango|orange|grape|papaya|guava|pomegranate|kiwi|melon|lemon/i.test(product.name + product.description) ? "Fresh Fruit" : "Fresh Vegetable")],
-    images: product.imageUrl ? [{ url: product.imageUrl, altText: product.name }] : [],
+    images: parseProductImages(product.imageUrls, product.imageUrl).map(url => ({ url, altText: product.name })),
     priceRange: { min: price, max: price },
     options: [{ name: "Unit", values: [product.unitLabel] }],
     isLocalCatalogItem: true,

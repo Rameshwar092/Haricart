@@ -53,8 +53,11 @@ describe("OperationsPortal catalog submit paths", () => {
   });
 
   it("carries the uploaded photo result through the admin create payload into persistence", async () => {
-    expect(source).toContain("const uploaded = await uploadImage.mutateAsync");
-    expect(source).toContain("setImageUrl(uploaded.url)");
+    // Photos are uploaded by the shared photo picker (up to 5) and handed back to the form.
+    const pickerSource = fs.readFileSync(path.resolve(process.cwd(), "../frontend/src/components/ProductPhotoPicker.tsx"), "utf8");
+    expect(pickerSource).toContain("const uploaded = await upload.mutateAsync");
+    expect(pickerSource).toContain("next = [...next, uploaded.url]");
+    expect(source).toContain('<ProductPhotoPicker images={imageUrls} onChange={setImageUrls} tone="dark"');
     expect(source).toContain("onCreate(payload)");
 
     const uploadedPhoto = { url: "/api/media/catalog-products/17/tomato.png" };
@@ -84,6 +87,20 @@ describe("OperationsPortal catalog submit paths", () => {
       isAvailable: true,
       countryOfOrigin: "India",
     });
+  });
+
+  it("saves several photos with the first one as the cover", async () => {
+    const photos = ["/api/media/a.png", "/api/media/b.png", "/api/media/c.png"];
+    const payload = buildProductCreatorSubmitPayload({ name: "Mango", price: "120", stockQuantity: 2, imageUrls: photos, shopId: "7", isAvailable: true }, true);
+    const caller = communityRouter.createCaller({ user: { id: 1, role: "admin" } } as never);
+    await caller.shop.inventory.create(payload!);
+    expect(state.inserted).toMatchObject({ imageUrl: photos[0], imageUrls: JSON.stringify(photos) });
+  });
+
+  it("refuses more than 5 photos", async () => {
+    const caller = communityRouter.createCaller({ user: { id: 1, role: "admin" } } as never);
+    const six = Array.from({ length: 6 }, (_, i) => `/api/media/p${i}.png`);
+    await expect(caller.shop.inventory.create({ name: "Mango", price: "120", stockQuantity: 2, unitLabel: "kg", countryOfOrigin: "India", shopId: 7, imageUrls: six, isAvailable: true })).rejects.toThrow(/up to 5 photos/);
   });
 
   it("submits InventoryCard edit state unchanged through the update payload and persistence contract", async () => {

@@ -19,6 +19,7 @@ import { hashResidentPassword } from "../password";
 import { isFirebaseConfigured, verifyFirebasePhoneToken } from "../_core/firebaseAuth";
 import { blockedAccountMessage, canAccountSignIn } from "@shared/delivery-flow";
 import { writeAuditLog } from "../audit";
+import { MAX_PRODUCT_IMAGES, normalizeProductImages } from "@shared/product-images";
 
 
 const SIMULATION_OTP = "1234";
@@ -92,6 +93,14 @@ export const normalizeVehicleServiceRequest = (input: { serviceKind: "electricia
   flatNumber: input.flatNumber.trim().toUpperCase(),
 });
 const productImageUrlSchema = z.string().trim().max(2000).refine(isValidProductImageUrl, "Image URL must be a storage path or HTTPS URL.");
+/** Up to 5 photos, cover first. */
+const productImageListSchema = z.array(productImageUrlSchema).max(MAX_PRODUCT_IMAGES, `You can add up to ${MAX_PRODUCT_IMAGES} photos.`);
+
+/** What to save for the photo columns: the cover in imageUrl and the full list in imageUrls. */
+export function productImageColumns(list: string[]) {
+  const urls = normalizeProductImages(list);
+  return { imageUrl: urls[0] ?? null, imageUrls: urls.length ? JSON.stringify(urls) : null };
+}
 export const isAllowedExchangeTransition = (from: z.infer<typeof exchangeStatusSchema>, to: z.infer<typeof exchangeStatusSchema>) =>
   (from === "requested" && ["approved", "rejected"].includes(to)) || (from === "approved" && to === "completed");
 
@@ -871,7 +880,7 @@ export const communityRouter = router({
         const uploaded = await storagePut(`catalog-products/${ctx.user.id}/${Date.now()}-${safeName}`, bytes, input.mimeType, ctx.user.id);
         return { success: true, ...uploaded };
       }),
-      update: protectedProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(2).max(160), description: z.string().trim().max(2000).optional(), price: z.string().regex(/^\d+(\.\d{1,2})?$/), compareAtPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(), countryOfOrigin: z.string().trim().min(2).max(80).default("India"), stockQuantity: z.number().int().min(0), unitLabel: z.string().trim().min(1).max(40), imageUrl: productImageUrlSchema.nullable().optional(), isAvailable: z.boolean() })).mutation(async ({ ctx, input }) => {
+      update: protectedProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(2).max(160), description: z.string().trim().max(2000).optional(), price: z.string().regex(/^\d+(\.\d{1,2})?$/), compareAtPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(), countryOfOrigin: z.string().trim().min(2).max(80).default("India"), stockQuantity: z.number().int().min(0), unitLabel: z.string().trim().min(1).max(40), imageUrl: productImageUrlSchema.nullable().optional(), imageUrls: productImageListSchema.optional(), isAvailable: z.boolean() })).mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
         if (!canRoleManageInventory(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN" });
@@ -881,7 +890,7 @@ export const communityRouter = router({
           const [shop] = await db.select({ ownerUserId: shops.ownerUserId }).from(shops).where(eq(shops.id, product.shopId)).limit(1);
           if (shop?.ownerUserId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "This product belongs to another shop" });
         }
-        await db.update(catalogProducts).set({ name: input.name, description: input.description || null, price: input.price, compareAtPrice: input.compareAtPrice === undefined ? product.compareAtPrice : input.compareAtPrice || null, countryOfOrigin: input.countryOfOrigin, stockQuantity: input.stockQuantity, unitLabel: input.unitLabel, imageUrl: input.imageUrl === undefined ? product.imageUrl : input.imageUrl, isAvailable: input.isAvailable }).where(eq(catalogProducts.id, input.id));
+        await db.update(catalogProducts).set({ name: input.name, description: input.description || null, price: input.price, compareAtPrice: input.compareAtPrice === undefined ? product.compareAtPrice : input.compareAtPrice || null, countryOfOrigin: input.countryOfOrigin, stockQuantity: input.stockQuantity, unitLabel: input.unitLabel, ...(input.imageUrls !== undefined ? productImageColumns(input.imageUrls) : input.imageUrl === undefined ? {} : productImageColumns(input.imageUrl ? [input.imageUrl] : [])), isAvailable: input.isAvailable }).where(eq(catalogProducts.id, input.id));
         return { success: true };
       }),
       remove: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -897,7 +906,7 @@ export const communityRouter = router({
         await db.delete(catalogProducts).where(eq(catalogProducts.id, input.id));
         return { success: true };
       }),
-      create: protectedProcedure.input(z.object({ name: z.string().trim().min(2).max(160), description: z.string().trim().max(2000).optional(), categoryId: z.number().int().positive().optional(), shopId: z.number().int().positive().optional(), price: z.string().regex(/^\d+(\.\d{1,2})?$/), compareAtPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(), countryOfOrigin: z.string().trim().min(2).max(80).default("India"), stockQuantity: z.number().int().min(0), unitLabel: z.string().trim().min(1).max(40).default("each"), imageUrl: productImageUrlSchema.optional(), isAvailable: z.boolean().default(true) })).mutation(async ({ ctx, input }) => {
+      create: protectedProcedure.input(z.object({ name: z.string().trim().min(2).max(160), description: z.string().trim().max(2000).optional(), categoryId: z.number().int().positive().optional(), shopId: z.number().int().positive().optional(), price: z.string().regex(/^\d+(\.\d{1,2})?$/), compareAtPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(), countryOfOrigin: z.string().trim().min(2).max(80).default("India"), stockQuantity: z.number().int().min(0), unitLabel: z.string().trim().min(1).max(40).default("each"), imageUrl: productImageUrlSchema.optional(), imageUrls: productImageListSchema.optional(), isAvailable: z.boolean().default(true) })).mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
         if (!canRoleManageInventory(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN" });
@@ -909,7 +918,7 @@ export const communityRouter = router({
         }
         const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 120) || "product";
         const handle = `${slug}-${Date.now()}`;
-        await db.insert(catalogProducts).values({ shopId: selectedShopId, categoryId: input.categoryId ?? null, handle, name: input.name, description: input.description || null, imageUrl: input.imageUrl || null, countryOfOrigin: input.countryOfOrigin, price: input.price, compareAtPrice: input.compareAtPrice || null, stockQuantity: input.stockQuantity, unitLabel: input.unitLabel, isAvailable: input.isAvailable });
+        await db.insert(catalogProducts).values({ shopId: selectedShopId, categoryId: input.categoryId ?? null, handle, name: input.name, description: input.description || null, ...productImageColumns(input.imageUrls ?? (input.imageUrl ? [input.imageUrl] : [])), countryOfOrigin: input.countryOfOrigin, price: input.price, compareAtPrice: input.compareAtPrice || null, stockQuantity: input.stockQuantity, unitLabel: input.unitLabel, isAvailable: input.isAvailable });
         return { success: true, handle, message: "Product added to the HariCart resident storefront when available with stock above zero. Connect a Shopify variant separately before accepting online checkout orders." };
       }),
     }),
